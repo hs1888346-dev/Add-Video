@@ -3,59 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Uploader Dashboard</title>
+    <title>Video Metadata Uploader | GitHub Style</title>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f6f8fa; margin: 0; padding: 20px; color: #24292e; }
+        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 30px; }
+        h2 { border-bottom: 1px solid #eaecef; padding-bottom: 10px; margin-bottom: 20px; font-weight: 600; }
+        
+        /* Auth Styles */
+        #auth-container { text-align: center; }
+        #google-signin-btn { background-color: #2ea44f; color: white; border: 1px solid rgba(27,31,35,.15); padding: 10px 20px; font-size: 16px; font-weight: 500; cursor: pointer; border-radius: 6px; }
+        #google-signin-btn:hover { background-color: #2c974b; }
+
+        /* Form Styles */
+        #app-container { display: none; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
+        input[type="text"], textarea { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #d1d5da; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        #save-btn { background-color: #0366d6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; float: right; }
+        #save-btn:hover { background-color: #005cc5; }
+
+        /* Dialog Styles */
+        .dialog { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: rgba(0,0,0,0.6); 
+            display: none; /* Initially hidden */
+            justify-content: center; align-items: center; z-index: 1000; 
+        }
+        .dialog-content { 
+            background: white; padding: 30px; border-radius: 12px; 
+            text-align: center; width: 90%; max-width: 400px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+        }
+        .dialog-content img { max-width: 150px; height: auto; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ccc; }
+        #save-to-db-btn { margin-top: 15px; background-color: #e36209; margin-right: 10px; }
+        #close-dialog-btn { margin-top: 15px; background-color: #6a737d; }
+    </style>
+    
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    <script src="app.js" defer></script>
-    <style>
-        /* Basic CSS for demonstration */
-        body { font-family: sans-serif; padding: 20px; }
-        #auth-container { text-align: center; }
-        #app-container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; display: none; }
-        input, textarea { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { padding: 10px 15px; background-color: #0366d6; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #005cbf; }
-        .dialog { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; }
-        .dialog-content { background: white; padding: 30px; border-radius: 8px; text-align: center; }
-        .dialog-content img { max-width: 100%; height: auto; margin-bottom: 10px; }
-    </style>
+    
 </head>
 <body>
 
-    <div id="auth-container">
-        <h2>Sign In to Continue</h2>
+    <div id="auth-container" class="container">
+        <h2>Authentication</h2>
         <button id="google-signin-btn">
-            [attachment_0](attachment) Sign-in With Google
+            Sign-in With Google
         </button>
     </div>
 
-    <div id="app-container">
+    <div id="app-container" class="container">
         <h2>Video Details Entry</h2>
         <form id="video-form">
             <label for="title-input">Title:</label>
-            <input type="text" id="title-input" required>
+            <input type="text" id="title-input" required placeholder="Enter video title">
 
             <label for="description-input">Description:</label>
-            <textarea id="description-input" rows="4" required></textarea>
+            <textarea id="description-input" rows="4" required placeholder="Enter video description"></textarea>
 
             <label for="token-input">Telegram Bot Token:</label>
-            <input type="text" id="token-input" required>
+            <input type="text" id="token-input" required placeholder="Enter Telegram Bot Token">
 
-            <button type="submit" id="save-btn">Save</button>
+            <button type="submit" id="save-btn">Get & Save Video</button>
+            <div style="clear: both;"></div>
         </form>
     </div>
 
     <div id="video-dialog" class="dialog">
         <div class="dialog-content">
             <h3>Confirm Video Details</h3>
-            <img id="dialog-thumbnail" src="" alt="Video Thumbnail" style="width: 200px; height: auto;">
+            <img id="dialog-thumbnail" src="https://via.placeholder.com/150x100?text=Thumbnail" alt="Video Thumbnail">
             <p><strong>Name:</strong> <span id="dialog-video-name"></span></p>
-            <p><strong>Save to:</strong> Database</p>
+            <p>Metadata will be saved to Firebase DB.</p>
             <button id="save-to-db-btn">SaveTo Database</button>
             <button id="close-dialog-btn">Cancel</button>
         </div>
     </div>
+
+    <script src="app.js" defer></script>
 
 </body>
 </html>
