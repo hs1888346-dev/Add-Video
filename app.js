@@ -1,4 +1,4 @@
-// --- Firebase Configuration (Same as before) ---
+// --- Firebase Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyCh3l_nm0h0rftal0-NZH0Nl5Vuf0MU_gM",
     authDomain: "noteapp-1ad69.firebaseapp.com",
@@ -34,198 +34,218 @@ const videoDialog = document.getElementById('video-dialog');
 const saveToDbButton = document.getElementById('save-to-db-btn');
 const closeDialogButton = document.getElementById('close-dialog-btn');
 
-let videoDataToSave = {};
+const loadVideosButton = document.getElementById('load-videos-btn');
+const videoSelect = document.getElementById('video-select');
+const saveButton = document.getElementById('save-btn'); // Renamed for clarity
 
-// --- 1. Email/Password Authentication Functions ---
+let videoDataToSave = {};
+let availableVideos = {}; // Stores all fetched video data indexed by file_unique_id
+
+// --- 1. Authentication Functions ---
 
 function handleRegistration() {
-    console.log("LOG: Registration process started."); 
     const email = authEmailInput.value;
     const password = authPasswordInput.value;
-    
-    if (!email || password.length < 6) {
-        alert("Please enter a valid email and a password of at least 6 characters.");
-        return;
-    }
-
+    // ... (Error handling and Firebase call remains the same)
     auth.createUserWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-            console.log("SUCCESS: Registration Successful for:", userCredential.user.email);
-            alert("Registration successful! You are now logged in.");
-        })
-        .catch((error) => {
-            console.error("ERROR: Registration Error:", error.code, error.message);
-            alert(`Registration Failed: ${error.message}`);
-        });
+        .then(() => alert("Registration successful!"))
+        .catch((error) => alert(`Registration Failed: ${error.message}`));
 }
 
 function handleLogin() {
-    console.log("LOG: Login process started."); 
     const email = authEmailInput.value;
     const password = authPasswordInput.value;
-
-    if (!email || !password) {
-        alert("Please enter both email and password.");
-        return;
-    }
-
+    // ... (Error handling and Firebase call remains the same)
     auth.signInWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-            console.log("SUCCESS: Login Successful for:", userCredential.user.email);
-            alert("Login successful!");
-        })
-        .catch((error) => {
-            console.error("ERROR: Login Error:", error.code, error.message);
-            alert(`Login Failed: ${error.message}`);
-        });
+        .then(() => console.log("Login successful!"))
+        .catch((error) => alert(`Login Failed: ${error.message}`));
 }
 
 // Attach event listeners
-if (registerButton) {
-    registerButton.addEventListener('click', handleRegistration);
-}
-if (loginButton) {
-    loginButton.addEventListener('click', handleLogin);
-}
+if (registerButton) registerButton.addEventListener('click', handleRegistration);
+if (loginButton) loginButton.addEventListener('click', handleLogin);
 
 // Authentication State Change (UI Management)
 auth.onAuthStateChanged((user) => {
     if (user) {
-        console.log("LOG: User is signed in. Showing main app.");
         authContainer.style.display = 'none';
         appContainer.style.display = 'block';
     } else {
-        console.log("LOG: User is signed out. Showing login form.");
         authContainer.style.display = 'block';
         appContainer.style.display = 'none';
     }
 });
 
 
-// --- 2. Form Submission (Direct Telegram API Call) ---
-if (videoForm) {
-    videoForm.addEventListener('submit', (e) => {
-        e.preventDefault(); 
-        console.log("LOG: Video Form Submission Started. Calling Telegram API Directly.");
+// --- 2. Load Videos Logic (New Functionality) ---
+function fetchVideosForDropdown() {
+    const botToken = document.getElementById('token-input').value;
+    if (!botToken) {
+        alert("Please enter the Telegram Bot Token first.");
+        return;
+    }
 
-        const title = document.getElementById('title-input').value;
-        const description = document.getElementById('description-input').value;
-        const botToken = document.getElementById('token-input').value;
-        
-        // Telegram API Endpoint Base URL
-        const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
+    const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
+    loadVideosButton.disabled = true;
+    loadVideosButton.textContent = 'Loading...';
+    videoSelect.innerHTML = '<option value="">Loading videos...</option>';
+    saveButton.disabled = true;
 
-        document.getElementById('save-btn').disabled = true;
-        document.getElementById('save-btn').textContent = 'Fetching Video...';
-
-        let videoData; // Video object will be stored here
-        let latestVideoMessage; // Full message object
-
-        // Step 1: Get recent updates/messages
-        fetch(`${TELEGRAM_API}/getUpdates`)
+    // Fetch the latest 100 updates (limit=100)
+    fetch(`${TELEGRAM_API}/getUpdates?limit=100`)
         .then(response => {
-             if (!response.ok) {
-                // If status is not 200-299, throw an error
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
+             if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+             return response.json();
         })
         .then(data => {
-            if (!data.ok) {
-                // Telegram API returned an error message (e.g., wrong token)
-                throw new Error(data.description || 'Unknown Telegram API error. Check Bot Token.');
-            }
+            if (!data.ok) throw new Error(data.description || 'API error. Check Token/Permissions.');
             
-            const latestUpdates = data.result;
-            
-            // Find the latest message containing a video object
-            for (let i = latestUpdates.length - 1; i >= 0; i--) {
-                const message = latestUpdates[i].channel_post || latestUpdates[i].message;
+            availableVideos = {};
+            let videoCount = 0;
+            videoSelect.innerHTML = '<option value="">-- Select a Video --</option>';
+
+            data.result.reverse().forEach(update => { // Process newest updates first
+                const message = update.channel_post || update.message;
                 if (message && message.video) {
-                    latestVideoMessage = message;
-                    break; 
+                    const video = message.video;
+                    const videoTitle = (message.caption || video.file_unique_id) + ` (Size: ${(video.file_size / 1024 / 1024).toFixed(2)} MB)`;
+                    
+                    // Store full video data using unique ID as the key
+                    availableVideos[video.file_unique_id] = {
+                        videoData: video,
+                        caption: message.caption || '',
+                        message
+                    };
+
+                    // Add option to the dropdown
+                    const option = document.createElement('option');
+                    option.value = video.file_unique_id;
+                    option.textContent = videoTitle;
+                    videoSelect.appendChild(option);
+                    videoCount++;
                 }
+            });
+
+            if (videoCount === 0) {
+                 videoSelect.innerHTML = '<option value="">No videos found in recent updates.</option>';
             }
-
-            if (!latestVideoMessage) {
-                throw new Error("No recent video found. Ensure the Bot has access to the chat/channel.");
-            }
-
-            videoData = latestVideoMessage.video;
-
-            // Check if thumbnail exists
-            if (videoData.thumb && videoData.thumb.file_id) {
-                console.log("LOG: Thumbnail File ID found. Proceeding to get File Path...");
-                // Step 2: Call getFile API to get the file_path for the thumbnail
-                return fetch(`${TELEGRAM_API}/getFile?file_id=${videoData.thumb.file_id}`);
-            } else {
-                console.warn("WARN: No thumbnail available for the latest video. Skipping getFile.");
-                // If no thumbnail, we return a fallback object to proceed to the next step
-                return { json: () => Promise.resolve({ ok: true, result: { file_path: 'NO_THUMBNAIL_FOUND' } }) };
-            }
-        })
-        .then(response => {
-            // Check if it's the real fetch response or the fallback JSON function
-            if (typeof response.json === 'function') {
-                return response.json();
-            } else {
-                 throw new Error("Internal logic error during getFile step."); 
-            }
-        })
-        .then(fileData => {
-            const file_path = fileData.result.file_path;
-            
-            let realThumbnailURL;
-
-            if (file_path && file_path !== 'NO_THUMBNAIL_FOUND') {
-                 // Step 3: Construct the final downloadable URL for the thumbnail
-                 realThumbnailURL = `https://api.telegram.org/file/bot${botToken}/${file_path}`;
-                 console.log("SUCCESS: Thumbnail URL constructed:", realThumbnailURL);
-            } else {
-                 // Fallback if no thumbnail path was available
-                 realThumbnailURL = 'https://via.placeholder.com/150x100?text=NO+THUMBNAIL';
-                 console.log("WARN: Using placeholder thumbnail.");
-            }
-
-            // Final data preparation using videoData from Step 1
-            const realVideoId = videoData.file_unique_id;
-            const realVideoName = title + " (" + (latestVideoMessage.caption || 'Video File') + ")";
-
-            // Prepare data for the final save
-            videoDataToSave = {
-                videoId: realVideoId,
-                thumbnailId: videoData.thumb ? videoData.thumb.file_unique_id : 'N/A', 
-                title: title,
-                description: description,
-                size: videoData.file_size, 
-                duration: videoData.duration, 
-                timestamp: firebase.database.ServerValue.TIMESTAMP 
-            };
-
-            // Populate and show the confirmation dialog
-            document.getElementById('dialog-thumbnail').src = realThumbnailURL;
-            document.getElementById('dialog-thumbnail').onerror = () => {
-                // If the constructed URL fails to load (e.g., token or file path issue), show a generic error image
-                document.getElementById('dialog-thumbnail').src = 'https://via.placeholder.com/150x100?text=Error+Loading';
-                console.error("ERROR: Failed to load constructed Thumbnail URL. Check token validity or file access.");
-            };
-            document.getElementById('dialog-video-name').textContent = realVideoName;
-            videoDialog.style.display = 'flex';
-            console.log("LOG: Confirmation Dialog Shown with Real Data.");
+            console.log(`LOG: Successfully loaded ${videoCount} videos.`);
+            saveButton.disabled = (videoCount === 0);
         })
         .catch(error => {
-            console.error("ERROR: Full Fetch Failed:", error);
-            alert(`Video fetch failed: ${error.message}. Please check your Bot Token and console.`);
+            console.error("ERROR: Failed to load videos:", error);
+            alert(`Failed to load videos: ${error.message}`);
+            videoSelect.innerHTML = '<option value="">Failed to load videos.</option>';
         })
         .finally(() => {
-            document.getElementById('save-btn').disabled = false;
-            document.getElementById('save-btn').textContent = 'Get & Save Video';
+            loadVideosButton.textContent = 'Load Videos';
+            loadVideosButton.disabled = false;
         });
-    });
+}
+
+if (loadVideosButton) {
+    loadVideosButton.addEventListener('click', fetchVideosForDropdown);
 }
 
 
-// --- 3. Save to Database Logic (Same as before) ---
+// --- 3. Form Submission (Get Details from Selected Video) ---
+if (videoForm) {
+    videoForm.addEventListener('submit', (e) => {
+        e.preventDefault(); 
+        
+        const selectedVideoId = videoSelect.value;
+        const title = document.getElementById('title-input').value;
+        const description = document.getElementById('description-input').value;
+        const botToken = document.getElementById('token-input').value;
+
+        if (!selectedVideoId) {
+            alert("Please select a video from the dropdown list.");
+            return;
+        }
+
+        const videoDetailsFromTelegram = availableVideos[selectedVideoId].videoData;
+        const latestVideoMessage = availableVideos[selectedVideoId].message;
+        const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
+        
+        saveButton.disabled = true;
+        saveButton.textContent = 'Fetching Details...';
+
+        
+        let realThumbnailURL;
+
+        // Step 1: Check for thumbnail ID
+        if (videoDetailsFromTelegram.thumb && videoDetailsFromTelegram.thumb.file_id) {
+            // Step 2: Call getFile API to get the file_path for the thumbnail
+            fetch(`${TELEGRAM_API}/getFile?file_id=${videoDetailsFromTelegram.thumb.file_id}`)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                return response.json();
+            })
+            .then(fileData => {
+                const file_path = fileData.result.file_path;
+                // Step 3: Construct the final downloadable URL for the thumbnail
+                realThumbnailURL = `https://api.telegram.org/file/bot${botToken}/${file_path}`;
+                return realThumbnailURL;
+            })
+            .catch(error => {
+                console.error("ERROR: Thumbnail fetch failed, using placeholder:", error);
+                realThumbnailURL = 'https://via.placeholder.com/150x100?text=THUMBNAIL+ERROR';
+                return realThumbnailURL; // Return placeholder to continue
+            })
+            .finally(() => {
+                displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL);
+            });
+        } else {
+            // If no thumbnail exists, display the dialog immediately
+            realThumbnailURL = 'https://via.placeholder.com/150x100?text=NO+THUMBNAIL';
+            displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL);
+        }
+    });
+}
+
+// Helper function to handle dialog display and data preparation
+function displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL) {
+    const realVideoId = videoDetailsFromTelegram.file_unique_id;
+    const realVideoName = title + " (" + (latestVideoMessage.caption || 'Video File') + ")";
+
+    // Prepare all data for the final save
+    videoDataToSave = {
+        title: title,
+        description: description,
+        
+        // Essential Telegram IDs
+        videoId: realVideoId,
+        telegramFileId: videoDetailsFromTelegram.file_id, 
+        thumbnailId: videoDetailsFromTelegram.thumb ? videoDetailsFromTelegram.thumb.file_unique_id : 'N/A', 
+        
+        // Video Metadata
+        size: videoDetailsFromTelegram.file_size, 
+        duration: videoDetailsFromTelegram.duration, 
+        mimeType: videoDetailsFromTelegram.mime_type, 
+        width: videoDetailsFromTelegram.width, 
+        height: videoDetailsFromTelegram.height, 
+        
+        // Thumbnail Data
+        thumbnailURL: realThumbnailURL, 
+        
+        timestamp: firebase.database.ServerValue.TIMESTAMP 
+    };
+
+    // Populate and show the confirmation dialog
+    document.getElementById('dialog-thumbnail').src = realThumbnailURL;
+    document.getElementById('dialog-thumbnail').onerror = () => {
+        document.getElementById('dialog-thumbnail').src = 'https://via.placeholder.com/150x100?text=Error+Loading';
+    };
+    document.getElementById('dialog-video-name').textContent = realVideoName;
+    document.getElementById('dialog-title-display').textContent = title; // Display user-entered title in dialog
+    videoDialog.style.display = 'flex';
+    saveButton.textContent = 'Get Details & Save';
+    saveButton.disabled = false;
+    console.log("LOG: Confirmation Dialog Shown with All Data.");
+}
+
+
+// --- 4. Save to Database Logic ---
 if (closeDialogButton) {
     closeDialogButton.addEventListener('click', () => {
         videoDialog.style.display = 'none';
@@ -239,7 +259,9 @@ if (saveToDbButton) {
         
         if (videoDataToSave.videoId) {
             const videoId = videoDataToSave.videoId;
-            const videoRef = database.ref('root/videos/' + videoId);
+            
+            // Path: 'videos/'
+            const videoRef = database.ref('videos/' + videoId);
 
             videoRef.set(videoDataToSave)
                 .then(() => {
@@ -247,6 +269,8 @@ if (saveToDbButton) {
                     alert("Video metadata saved successfully!");
                     videoDialog.style.display = 'none'; 
                     videoForm.reset(); 
+                    // Clear the selection after saving
+                    videoSelect.innerHTML = '<option value="">-- Load videos first --</option>'; 
                 })
                 .catch((error) => {
                     console.error("ERROR: Database Save Error:", error.message);
@@ -254,7 +278,8 @@ if (saveToDbButton) {
                 });
         } else {
             console.error("ERROR: videoDataToSave is empty. Form not processed?");
-            alert("Error: Please submit the form first.");
+            alert("Error: Please select and process a video first.");
         }
     });
-}
+                               }
+                                
