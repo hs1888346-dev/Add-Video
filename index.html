@@ -1,48 +1,61 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-
-<script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-auth.js"></script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Uploader Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="app.js" defer></script>
+    <style>
+        /* Basic CSS for demonstration */
+        body { font-family: sans-serif; padding: 20px; }
+        #auth-container { text-align: center; }
+        #app-container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; display: none; }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 15px; background-color: #0366d6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #005cbf; }
+        .dialog { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; }
+        .dialog-content { background: white; padding: 30px; border-radius: 8px; text-align: center; }
+        .dialog-content img { max-width: 100%; height: auto; margin-bottom: 10px; }
+    </style>
 </head>
 <body>
 
-<button id="loginBtn">Login with Google</button>
+    <div id="auth-container">
+        <h2>Sign In to Continue</h2>
+        <button id="google-signin-btn">
+            [attachment_0](attachment) Sign-in With Google
+        </button>
+    </div>
 
-<script>
-// ----------------------------
-var firebaseConfig = {
-  apiKey: "AIzaSyCh3l_nm0h0rftal0-NZH0Nl5Vuf0MU_gM",
-  authDomain: "noteapp-1ad69.firebaseapp.com",
-  projectId: "noteapp-1ad69",
-};
-// ----------------------------
+    <div id="app-container">
+        <h2>Video Details Entry</h2>
+        <form id="video-form">
+            <label for="title-input">Title:</label>
+            <input type="text" id="title-input" required>
 
-firebase.initializeApp(firebaseConfig);
+            <label for="description-input">Description:</label>
+            <textarea id="description-input" rows="4" required></textarea>
 
-const auth = firebase.auth();
-const provider = new firebase.auth.GoogleAuthProvider();
+            <label for="token-input">Telegram Bot Token:</label>
+            <input type="text" id="token-input" required>
 
-// ---- this is the REAL fix ----
-auth.useDeviceLanguage();
+            <button type="submit" id="save-btn">Save</button>
+        </form>
+    </div>
 
-document.getElementById("loginBtn").onclick = () => {
-  
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-  .then(()=>{ 
-      return auth.signInWithPopup(provider)
-  })
-  .then(result=>{
-     alert("Login success "+result.user.displayName);
-  })
-  .catch(error=>{
-     alert(error.message);
-  })
-
-}
-</script>
+    <div id="video-dialog" class="dialog">
+        <div class="dialog-content">
+            <h3>Confirm Video Details</h3>
+            <img id="dialog-thumbnail" src="" alt="Video Thumbnail" style="width: 200px; height: auto;">
+            <p><strong>Name:</strong> <span id="dialog-video-name"></span></p>
+            <p><strong>Save to:</strong> Database</p>
+            <button id="save-to-db-btn">SaveTo Database</button>
+            <button id="close-dialog-btn">Cancel</button>
+        </div>
+    </div>
 
 </body>
 </html>
