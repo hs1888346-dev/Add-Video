@@ -112,34 +112,33 @@ if (videoForm) {
         const description = document.getElementById('description-input').value;
         const botToken = document.getElementById('token-input').value;
         
-        // Telegram API Endpoint
+        // Telegram API Endpoint Base URL
         const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
 
         document.getElementById('save-btn').disabled = true;
         document.getElementById('save-btn').textContent = 'Fetching Video...';
 
-        // Direct Telegram API call to get recent updates/messages
+        let videoData; // Video object will be stored here
+        let latestVideoMessage; // Full message object
+
+        // Step 1: Get recent updates/messages
         fetch(`${TELEGRAM_API}/getUpdates`)
         .then(response => {
              if (!response.ok) {
-                // Network error, maybe CORS or token issue
+                // If status is not 200-299, throw an error
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log("LOG: Data received from Telegram.", data);
-
             if (!data.ok) {
-                alert(`Telegram API Error: ${data.description}. Check your Bot Token.`);
-                return;
+                // Telegram API returned an error message (e.g., wrong token)
+                throw new Error(data.description || 'Unknown Telegram API error. Check Bot Token.');
             }
             
-            // Find the latest message containing a video object
             const latestUpdates = data.result;
-            let latestVideoMessage = null;
-
-            // Iterate backwards to find the most recent video
+            
+            // Find the latest message containing a video object
             for (let i = latestUpdates.length - 1; i >= 0; i--) {
                 const message = latestUpdates[i].channel_post || latestUpdates[i].message;
                 if (message && message.video) {
@@ -149,40 +148,74 @@ if (videoForm) {
             }
 
             if (!latestVideoMessage) {
-                alert("Error: No recent video found in updates. Ensure the Bot can read messages in that chat/channel.");
-                return;
+                throw new Error("No recent video found. Ensure the Bot has access to the chat/channel.");
             }
 
-            const video = latestVideoMessage.video;
+            videoData = latestVideoMessage.video;
+
+            // Check if thumbnail exists
+            if (videoData.thumb && videoData.thumb.file_id) {
+                console.log("LOG: Thumbnail File ID found. Proceeding to get File Path...");
+                // Step 2: Call getFile API to get the file_path for the thumbnail
+                return fetch(`${TELEGRAM_API}/getFile?file_id=${videoData.thumb.file_id}`);
+            } else {
+                console.warn("WARN: No thumbnail available for the latest video. Skipping getFile.");
+                // If no thumbnail, we return a fallback object to proceed to the next step
+                return { json: () => Promise.resolve({ ok: true, result: { file_path: 'NO_THUMBNAIL_FOUND' } }) };
+            }
+        })
+        .then(response => {
+            // Check if it's the real fetch response or the fallback JSON function
+            if (typeof response.json === 'function') {
+                return response.json();
+            } else {
+                 throw new Error("Internal logic error during getFile step."); 
+            }
+        })
+        .then(fileData => {
+            const file_path = fileData.result.file_path;
             
-            // NOTE: Thumbnail URL cannot be generated directly without another API call (getFile)
-            // and the Telegram file server URL construction. We use placeholder data.
-            const realVideoId = video.file_unique_id;
+            let realThumbnailURL;
+
+            if (file_path && file_path !== 'NO_THUMBNAIL_FOUND') {
+                 // Step 3: Construct the final downloadable URL for the thumbnail
+                 realThumbnailURL = `https://api.telegram.org/file/bot${botToken}/${file_path}`;
+                 console.log("SUCCESS: Thumbnail URL constructed:", realThumbnailURL);
+            } else {
+                 // Fallback if no thumbnail path was available
+                 realThumbnailURL = 'https://via.placeholder.com/150x100?text=NO+THUMBNAIL';
+                 console.log("WARN: Using placeholder thumbnail.");
+            }
+
+            // Final data preparation using videoData from Step 1
+            const realVideoId = videoData.file_unique_id;
             const realVideoName = title + " (" + (latestVideoMessage.caption || 'Video File') + ")";
-            const realThumbnailURL = 'https://via.placeholder.com/150x100?text=VIDEO+FOUND'; 
-            
+
             // Prepare data for the final save
             videoDataToSave = {
                 videoId: realVideoId,
-                // We use the thumb file unique ID if available, otherwise N/A
-                thumbnailId: video.thumb ? video.thumb.file_unique_id : 'N/A', 
+                thumbnailId: videoData.thumb ? videoData.thumb.file_unique_id : 'N/A', 
                 title: title,
                 description: description,
-                size: video.file_size, 
-                duration: video.duration, 
+                size: videoData.file_size, 
+                duration: videoData.duration, 
                 timestamp: firebase.database.ServerValue.TIMESTAMP 
             };
 
             // Populate and show the confirmation dialog
             document.getElementById('dialog-thumbnail').src = realThumbnailURL;
+            document.getElementById('dialog-thumbnail').onerror = () => {
+                // If the constructed URL fails to load (e.g., token or file path issue), show a generic error image
+                document.getElementById('dialog-thumbnail').src = 'https://via.placeholder.com/150x100?text=Error+Loading';
+                console.error("ERROR: Failed to load constructed Thumbnail URL. Check token validity or file access.");
+            };
             document.getElementById('dialog-video-name').textContent = realVideoName;
             videoDialog.style.display = 'flex';
             console.log("LOG: Confirmation Dialog Shown with Real Data.");
-
         })
         .catch(error => {
-            console.error("ERROR: Network or Fetch Error (CORS/Token):", error);
-            alert(`Video fetch failed: ${error.message}. Check browser console for details.`);
+            console.error("ERROR: Full Fetch Failed:", error);
+            alert(`Video fetch failed: ${error.message}. Please check your Bot Token and console.`);
         })
         .finally(() => {
             document.getElementById('save-btn').disabled = false;
