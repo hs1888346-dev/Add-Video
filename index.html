@@ -1,120 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Video to Firebase</title>
-  <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-database.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-storage.js"></script>
+<meta charset="UTF-8">
+<title>Login - Premium</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-auth.js"></script>
+
+<style>
+body{
+    margin:0;
+    background:#0c0f14;
+    font-family:Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.card{
+    background:#12151d;
+    width:370px;
+    padding:40px;
+    border-radius:18px;
+    text-align:center;
+    box-shadow:0px 0px 20px rgba(255,255,255,0.05);
+}
+h2{
+    color:white;
+    margin-bottom:20px;
+}
+button{
+    width:100%;
+    padding:14px;
+    border-radius:12px;
+    font-size:18px;
+    border:none;
+    background:#0f8cff;
+    color:white;
+    cursor:pointer;
+    transition:0.3s;
+}
+button:hover{
+    background:#0066d5;
+}
+.google-logo{
+    width:24px;
+    vertical-align:middle;
+    margin-right:10px;
+}
+.note{
+    color:#939393;
+    font-size:13px;
+    margin-top:25px;
+}
+</style>
+
 </head>
 <body>
-  <h2>Sign in with Google</h2>
-  <button id="googleSignIn">Sign In</button>
 
-  <div id="uploadSection" style="display:none;">
-    <h3>Video Details</h3>
-    <input type="text" id="title" placeholder="Enter Title"><br><br>
-    <input type="text" id="description" placeholder="Enter Description"><br><br>
-    <input type="text" id="botToken" placeholder="Telegram Bot Token"><br><br>
-    <input type="file" id="videoFile" accept="video/mp4"><br><br>
-    <button id="saveBtn">Save</button>
-  </div>
+<div class="card">
+    <h2>Premium Login</h2>
 
-  <script>
-    // Firebase config
-    var firebaseConfig = {
-      apiKey: "AIzaSyCh3l_nm0h0rftal0-NZH0Nl5Vuf0MU_gM",
-      authDomain: "noteapp-1ad69.firebaseapp.com",
-      databaseURL: "https://noteapp-1ad69-default-rtdb.firebaseio.com",
-      projectId: "noteapp-1ad69",
-      storageBucket: "noteapp-1ad69.appspot.com",
-      messagingSenderId: "33056669455",
-      appId: "1:33056669455:web:21b7f7f58847112b9a487a",
-      measurementId: "G-RXS945QBFY"
-    };
-    firebase.initializeApp(firebaseConfig);
+    <button id="googleLogin">
+        <img class="google-logo" src="https://www.svgrepo.com/show/355037/google.svg">
+        Continue with Google
+    </button>
 
-    const auth = firebase.auth();
-    const db = firebase.database();
-    const storage = firebase.storage();
+    <div class="note">We never share your information</div>
+</div>
 
-    // Google Sign-In
-    document.getElementById('googleSignIn').onclick = () => {
-      var provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider)
-        .then(result => {
-          alert("Signed in as " + result.user.displayName);
-          document.getElementById('uploadSection').style.display = 'block';
-        })
-        .catch(err => alert(err.message));
-    }
+<script>
+// ---- Firebase Config ----
+var firebaseConfig = {
+  apiKey: "AIzaSyCh3l_nm0h0rftal0-NZH0Nl5Vuf0MU_gM",
+  authDomain: "noteapp-1ad69.firebaseapp.com",
+  databaseURL: "https://noteapp-1ad69-default-rtdb.firebaseio.com",
+  projectId: "noteapp-1ad69",
+  storageBucket: "noteapp-1ad69.appspot.com",
+  messagingSenderId: "33056669455",
+  appId: "1:33056669455:web:21b7f7f58847112b9a487a",
+  measurementId: "G-RXS945QBFY"
+};
+firebase.initializeApp(firebaseConfig);
 
-    // Save Video
-    document.getElementById('saveBtn').onclick = async () => {
-      const file = document.getElementById('videoFile').files[0];
-      if (!file) return alert("Select an MP4 file!");
-      
-      const title = document.getElementById('title').value;
-      const description = document.getElementById('description').value;
-      const botToken = document.getElementById('botToken').value;
+// Login premium popup
+document.getElementById("googleLogin").onclick = function(){
+  const provider = new firebase.auth.GoogleAuthProvider();
 
-      const videoId = Date.now().toString(); // unique videoId
-      const thumbnailId = videoId + "_thumb";
+  firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .then(()=>{
+     return firebase.auth().signInWithPopup(provider);
+  })
+  .then(res=>{
+     alert("Welcome "+res.user.displayName);
+     window.location="dashboard.html"; // yaha redirect karna
+  })
+  .catch(err=>alert(err.message))
+}
+</script>
 
-      // Generate thumbnail (simple: first frame) - optional: can be done server-side
-      const thumbnailBlob = await captureThumbnail(file);
-
-      // Upload video
-      const videoRef = storage.ref('videos/' + videoId + '.mp4');
-      const thumbRef = storage.ref('thumbnails/' + thumbnailId + '.png');
-
-      await videoRef.put(file);
-      await thumbRef.put(thumbnailBlob);
-
-      const videoSize = file.size;
-      const duration = await getVideoDuration(file);
-
-      // Save to DB
-      db.ref('videos/' + videoId).set({
-        videoId,
-        thumbnailId,
-        title,
-        description,
-        size: videoSize,
-        duration
-      });
-
-      alert("Video saved successfully!");
-    }
-
-    // Capture thumbnail from video
-    async function captureThumbnail(file) {
-      return new Promise(resolve => {
-        const video = document.createElement('video');
-        video.src = URL.createObjectURL(file);
-        video.currentTime = 1;
-        video.onloadeddata = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob(blob => resolve(blob), 'image/png');
-        }
-      });
-    }
-
-    // Get video duration
-    async function getVideoDuration(file) {
-      return new Promise(resolve => {
-        const video = document.createElement('video');
-        video.src = URL.createObjectURL(file);
-        video.onloadedmetadata = () => {
-          resolve(video.duration);
-        }
-      });
-    }
-  </script>
 </body>
 </html>
