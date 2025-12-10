@@ -36,17 +36,17 @@ const closeDialogButton = document.getElementById('close-dialog-btn');
 
 const loadVideosButton = document.getElementById('load-videos-btn');
 const videoSelect = document.getElementById('video-select');
-const saveButton = document.getElementById('save-btn'); // Renamed for clarity
+const saveButton = document.getElementById('save-btn'); 
+const videoPreviewGroup = document.getElementById('video-preview-group');
+const videoPreviewImage = document.getElementById('video-preview');
 
 let videoDataToSave = {};
 let availableVideos = {}; // Stores all fetched video data indexed by file_unique_id
 
-// --- 1. Authentication Functions ---
-
+// --- 1. Authentication Functions (Same as before) ---
 function handleRegistration() {
     const email = authEmailInput.value;
     const password = authPasswordInput.value;
-    // ... (Error handling and Firebase call remains the same)
     auth.createUserWithEmailAndPassword(email, password)
         .then(() => alert("Registration successful!"))
         .catch((error) => alert(`Registration Failed: ${error.message}`));
@@ -55,7 +55,6 @@ function handleRegistration() {
 function handleLogin() {
     const email = authEmailInput.value;
     const password = authPasswordInput.value;
-    // ... (Error handling and Firebase call remains the same)
     auth.signInWithEmailAndPassword(email, password)
         .then(() => console.log("Login successful!"))
         .catch((error) => alert(`Login Failed: ${error.message}`));
@@ -77,7 +76,34 @@ auth.onAuthStateChanged((user) => {
 });
 
 
-// --- 2. Load Videos Logic (New Functionality) ---
+// --- Helper: Function to Fetch Thumbnail URL ---
+async function getThumbnailUrl(botToken, thumbFileId) {
+    const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
+    
+    if (!thumbFileId) {
+        return 'https://via.placeholder.com/150x100?text=NO+THUMBNAIL';
+    }
+
+    try {
+        const response = await fetch(`${TELEGRAM_API}/getFile?file_id=${thumbFileId}`);
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        
+        const fileData = await response.json();
+        const file_path = fileData.result.file_path;
+        
+        if (file_path) {
+            return `https://api.telegram.org/file/bot${botToken}/${file_path}`;
+        }
+        return 'https://via.placeholder.com/150x100?text=THUMBNAIL+PATH+FAIL';
+
+    } catch (error) {
+        console.error("ERROR: Failed to fetch thumbnail path:", error);
+        return 'https://via.placeholder.com/150x100?text=THUMBNAIL+ERROR';
+    }
+}
+
+
+// --- 2. Load Videos Logic ---
 function fetchVideosForDropdown() {
     const botToken = document.getElementById('token-input').value;
     if (!botToken) {
@@ -90,8 +116,8 @@ function fetchVideosForDropdown() {
     loadVideosButton.textContent = 'Loading...';
     videoSelect.innerHTML = '<option value="">Loading videos...</option>';
     saveButton.disabled = true;
+    videoPreviewGroup.style.display = 'none';
 
-    // Fetch the latest 100 updates (limit=100)
     fetch(`${TELEGRAM_API}/getUpdates?limit=100`)
         .then(response => {
              if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
@@ -104,20 +130,18 @@ function fetchVideosForDropdown() {
             let videoCount = 0;
             videoSelect.innerHTML = '<option value="">-- Select a Video --</option>';
 
-            data.result.reverse().forEach(update => { // Process newest updates first
+            data.result.reverse().forEach(update => { 
                 const message = update.channel_post || update.message;
                 if (message && message.video) {
                     const video = message.video;
                     const videoTitle = (message.caption || video.file_unique_id) + ` (Size: ${(video.file_size / 1024 / 1024).toFixed(2)} MB)`;
                     
-                    // Store full video data using unique ID as the key
                     availableVideos[video.file_unique_id] = {
                         videoData: video,
                         caption: message.caption || '',
                         message
                     };
 
-                    // Add option to the dropdown
                     const option = document.createElement('option');
                     option.value = video.file_unique_id;
                     option.textContent = videoTitle;
@@ -148,9 +172,37 @@ if (loadVideosButton) {
 }
 
 
-// --- 3. Form Submission (Get Details from Selected Video) ---
+// --- 3. Video Selection Change Listener (New) ---
+if (videoSelect) {
+    videoSelect.addEventListener('change', async () => {
+        const selectedVideoId = videoSelect.value;
+        const botToken = document.getElementById('token-input').value;
+
+        if (!selectedVideoId || !botToken) {
+            videoPreviewGroup.style.display = 'none';
+            return;
+        }
+
+        const videoDetails = availableVideos[selectedVideoId].videoData;
+        const thumbFileId = videoDetails.thumb ? videoDetails.thumb.file_id : null;
+
+        videoPreviewGroup.style.display = 'block';
+        videoPreviewImage.src = 'https://via.placeholder.com/150x100?text=Loading...';
+        
+        const realThumbnailURL = await getThumbnailUrl(botToken, thumbFileId);
+        
+        videoPreviewImage.src = realThumbnailURL;
+        videoPreviewImage.onerror = () => {
+            videoPreviewImage.src = 'https://via.placeholder.com/150x100?text=Preview+Error';
+        };
+        console.log("LOG: Preview Image Updated with URL:", realThumbnailURL);
+    });
+}
+
+
+// --- 4. Form Submission (Get Details from Selected Video) ---
 if (videoForm) {
-    videoForm.addEventListener('submit', (e) => {
+    videoForm.addEventListener('submit', async (e) => {
         e.preventDefault(); 
         
         const selectedVideoId = videoSelect.value;
@@ -162,90 +214,54 @@ if (videoForm) {
             alert("Please select a video from the dropdown list.");
             return;
         }
-
+        
+        // Data is already available from the change listener
         const videoDetailsFromTelegram = availableVideos[selectedVideoId].videoData;
         const latestVideoMessage = availableVideos[selectedVideoId].message;
-        const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`;
-        
+        const thumbFileId = videoDetailsFromTelegram.thumb ? videoDetailsFromTelegram.thumb.file_id : null;
+
         saveButton.disabled = true;
         saveButton.textContent = 'Fetching Details...';
 
-        
-        let realThumbnailURL;
+        // Get the final thumbnail URL again (or rely on the already fetched one)
+        const realThumbnailURL = await getThumbnailUrl(botToken, thumbFileId);
 
-        // Step 1: Check for thumbnail ID
-        if (videoDetailsFromTelegram.thumb && videoDetailsFromTelegram.thumb.file_id) {
-            // Step 2: Call getFile API to get the file_path for the thumbnail
-            fetch(`${TELEGRAM_API}/getFile?file_id=${videoDetailsFromTelegram.thumb.file_id}`)
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                return response.json();
-            })
-            .then(fileData => {
-                const file_path = fileData.result.file_path;
-                // Step 3: Construct the final downloadable URL for the thumbnail
-                realThumbnailURL = `https://api.telegram.org/file/bot${botToken}/${file_path}`;
-                return realThumbnailURL;
-            })
-            .catch(error => {
-                console.error("ERROR: Thumbnail fetch failed, using placeholder:", error);
-                realThumbnailURL = 'https://via.placeholder.com/150x100?text=THUMBNAIL+ERROR';
-                return realThumbnailURL; // Return placeholder to continue
-            })
-            .finally(() => {
-                displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL);
-            });
-        } else {
-            // If no thumbnail exists, display the dialog immediately
-            realThumbnailURL = 'https://via.placeholder.com/150x100?text=NO+THUMBNAIL';
-            displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL);
-        }
+
+        // Display Confirmation Dialog and Prepare Data
+        const realVideoId = videoDetailsFromTelegram.file_unique_id;
+        const realVideoName = title + " (" + (latestVideoMessage.caption || 'Video File') + ")";
+
+        videoDataToSave = {
+            title: title,
+            description: description,
+            videoId: realVideoId,
+            telegramFileId: videoDetailsFromTelegram.file_id, 
+            thumbnailId: videoDetailsFromTelegram.thumb ? videoDetailsFromTelegram.thumb.file_unique_id : 'N/A', 
+            size: videoDetailsFromTelegram.file_size, 
+            duration: videoDetailsFromTelegram.duration, 
+            mimeType: videoDetailsFromTelegram.mime_type, 
+            width: videoDetailsFromTelegram.width, 
+            height: videoDetailsFromTelegram.height, 
+            thumbnailURL: realThumbnailURL, 
+            timestamp: firebase.database.ServerValue.TIMESTAMP 
+        };
+
+        // Populate and show the confirmation dialog
+        document.getElementById('dialog-thumbnail').src = realThumbnailURL;
+        document.getElementById('dialog-thumbnail').onerror = () => {
+            document.getElementById('dialog-thumbnail').src = 'https://via.placeholder.com/150x100?text=Error+Loading';
+        };
+        document.getElementById('dialog-video-name').textContent = realVideoName;
+        document.getElementById('dialog-title-display').textContent = title; 
+        videoDialog.style.display = 'flex';
+        saveButton.textContent = 'Get Details & Save';
+        saveButton.disabled = false;
+        console.log("LOG: Confirmation Dialog Shown with All Data.");
     });
 }
 
-// Helper function to handle dialog display and data preparation
-function displayConfirmationDialog(title, description, videoDetailsFromTelegram, latestVideoMessage, realThumbnailURL) {
-    const realVideoId = videoDetailsFromTelegram.file_unique_id;
-    const realVideoName = title + " (" + (latestVideoMessage.caption || 'Video File') + ")";
 
-    // Prepare all data for the final save
-    videoDataToSave = {
-        title: title,
-        description: description,
-        
-        // Essential Telegram IDs
-        videoId: realVideoId,
-        telegramFileId: videoDetailsFromTelegram.file_id, 
-        thumbnailId: videoDetailsFromTelegram.thumb ? videoDetailsFromTelegram.thumb.file_unique_id : 'N/A', 
-        
-        // Video Metadata
-        size: videoDetailsFromTelegram.file_size, 
-        duration: videoDetailsFromTelegram.duration, 
-        mimeType: videoDetailsFromTelegram.mime_type, 
-        width: videoDetailsFromTelegram.width, 
-        height: videoDetailsFromTelegram.height, 
-        
-        // Thumbnail Data
-        thumbnailURL: realThumbnailURL, 
-        
-        timestamp: firebase.database.ServerValue.TIMESTAMP 
-    };
-
-    // Populate and show the confirmation dialog
-    document.getElementById('dialog-thumbnail').src = realThumbnailURL;
-    document.getElementById('dialog-thumbnail').onerror = () => {
-        document.getElementById('dialog-thumbnail').src = 'https://via.placeholder.com/150x100?text=Error+Loading';
-    };
-    document.getElementById('dialog-video-name').textContent = realVideoName;
-    document.getElementById('dialog-title-display').textContent = title; // Display user-entered title in dialog
-    videoDialog.style.display = 'flex';
-    saveButton.textContent = 'Get Details & Save';
-    saveButton.disabled = false;
-    console.log("LOG: Confirmation Dialog Shown with All Data.");
-}
-
-
-// --- 4. Save to Database Logic ---
+// --- 5. Save to Database Logic (Same as before) ---
 if (closeDialogButton) {
     closeDialogButton.addEventListener('click', () => {
         videoDialog.style.display = 'none';
@@ -259,8 +275,6 @@ if (saveToDbButton) {
         
         if (videoDataToSave.videoId) {
             const videoId = videoDataToSave.videoId;
-            
-            // Path: 'videos/'
             const videoRef = database.ref('videos/' + videoId);
 
             videoRef.set(videoDataToSave)
@@ -269,8 +283,8 @@ if (saveToDbButton) {
                     alert("Video metadata saved successfully!");
                     videoDialog.style.display = 'none'; 
                     videoForm.reset(); 
-                    // Clear the selection after saving
                     videoSelect.innerHTML = '<option value="">-- Load videos first --</option>'; 
+                    videoPreviewGroup.style.display = 'none'; // Hide preview after saving
                 })
                 .catch((error) => {
                     console.error("ERROR: Database Save Error:", error.message);
@@ -281,5 +295,4 @@ if (saveToDbButton) {
             alert("Error: Please select and process a video first.");
         }
     });
-                               }
-                                
+}
