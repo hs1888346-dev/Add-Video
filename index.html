@@ -3,90 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Metadata Uploader | Email/Password Auth</title>
-    
+    <title>Firebase Telegram App</title>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-database.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f6f8fa; margin: 0; padding: 20px; color: #24292e; }
-        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 30px; }
-        h2 { border-bottom: 1px solid #eaecef; padding-bottom: 10px; margin-bottom: 20px; font-weight: 600; }
-        
-        /* Auth Styles */
-        #auth-container { text-align: left; }
-        .auth-form-group { margin-bottom: 15px; }
-        .auth-form-group input { width: 100%; padding: 8px; border: 1px solid #d1d5da; border-radius: 6px; box-sizing: border-box; }
-        .auth-buttons button { margin-right: 10px; padding: 10px 15px; border-radius: 6px; cursor: pointer; border: none; }
-        #register-btn { background-color: #2ea44f; color: white; }
-        #login-btn { background-color: #0366d6; color: white; }
-        #register-btn:hover { background-color: #2c974b; }
-        #login-btn:hover { background-color: #005cc5; }
-
-        /* Form Styles (Same as before) */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f9; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        h2 { border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 20px; }
+        input[type="email"], input[type="password"], input[type="text"], input[type="url"], select {
+            width: 95%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        button:hover { background-color: #0056b3; }
         #app-container { display: none; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px; }
-        input[type="text"], textarea { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #d1d5da; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
-        #save-btn { background-color: #0366d6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; float: right; }
-        #save-btn:hover { background-color: #005cc5; }
+        .form-group { margin-bottom: 15px; }
 
-        /* Dialog Styles (Same as before) */
-        .dialog { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .dialog-content { background: white; padding: 30px; border-radius: 12px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .dialog-content img { max-width: 150px; height: auto; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ccc; }
-        #save-to-db-btn { margin-top: 15px; background-color: #e36209; margin-right: 10px; }
-        #close-dialog-btn { margin-top: 15px; background-color: #6a737d; }
+        /* Dialog Styling */
+        #video-dialog {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center; z-index: 1000;
+        }
+        .dialog-content { background: white; padding: 20px; border-radius: 8px; max-width: 400px; text-align: center; }
+        #dialog-thumbnail { max-width: 100%; height: auto; margin-bottom: 15px; border: 1px solid #ccc; }
     </style>
-    
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    
 </head>
 <body>
 
-    <div id="auth-container" class="container">
-        <h2>Login / Register</h2>
-        <div class="auth-form-group">
-            <label for="auth-email">Email:</label>
-            <input type="email" id="auth-email" placeholder="Enter your email" required>
-        </div>
-        <div class="auth-form-group">
-            <label for="auth-password">Password:</label>
-            <input type="password" id="auth-password" placeholder="Enter password (min 6 chars)" required>
-        </div>
-        <div class="auth-buttons">
-            <button id="register-btn">Register</button>
+    <div class="container">
+        <div id="auth-container">
+            <h2>User Login / Register</h2>
+            <div class="form-group">
+                <input type="email" id="auth-email" placeholder="Email">
+            </div>
+            <div class="form-group">
+                <input type="password" id="auth-password" placeholder="Password">
+            </div>
             <button id="login-btn">Login</button>
+            <button id="register-btn">Register</button>
+        </div>
+
+        <div id="app-container">
+            <h2>Telegram Video Details</h2>
+            <form id="video-form">
+                <div class="form-group">
+                    <label for="token-input">Telegram Bot Token:</label>
+                    <input type="text" id="token-input" placeholder="Enter Bot Token" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="video-select">Select Video:</label>
+                    <select id="video-select" required>
+                        <option value="">-- Load videos first --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="title-input">Title for Database:</label>
+                    <input type="text" id="title-input" placeholder="Enter video title" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="description-input">Description:</label>
+                    <textarea id="description-input" placeholder="Enter description"></textarea>
+                </div>
+                
+                <button type="button" id="load-videos-btn">Load Videos</button>
+                <button type="submit" id="save-btn" disabled>Get Details & Save</button>
+            </form>
         </div>
     </div>
 
-    <div id="app-container" class="container">
-        <h2>Video Details Entry</h2>
-        <form id="video-form">
-            <label for="title-input">Title:</label>
-            <input type="text" id="title-input" required placeholder="Enter video title">
-
-            <label for="description-input">Description:</label>
-            <textarea id="description-input" rows="4" required placeholder="Enter video description"></textarea>
-
-            <label for="token-input">Telegram Bot Token:</label>
-            <input type="text" id="token-input" required placeholder="Enter Telegram Bot Token">
-
-            <button type="submit" id="save-btn">Get & Save Video</button>
-            <div style="clear: both;"></div>
-        </form>
-    </div>
-
-    <div id="video-dialog" class="dialog">
+    <div id="video-dialog">
         <div class="dialog-content">
             <h3>Confirm Video Details</h3>
-            <img id="dialog-thumbnail" src="https://via.placeholder.com/150x100?text=Thumbnail" alt="Video Thumbnail">
-            <p><strong>Name:</strong> <span id="dialog-video-name"></span></p>
-            <p>Metadata will be saved to Firebase DB.</p>
-            <button id="save-to-db-btn">SaveTo Database</button>
-            <button id="close-dialog-btn">Cancel</button>
+            <img id="dialog-thumbnail" src="https://via.placeholder.com/150x100?text=Loading..." alt="Video Thumbnail">
+            <p>Video Name: <span id="dialog-video-name">Loading...</span></p>
+            <p>Title: <span id="dialog-title-display"></span></p>
+            <button id="save-to-db-btn">Confirm & Save to DB</button>
+            <button id="close-dialog-btn">Close</button>
         </div>
     </div>
 
-    <script src="app.js" defer></script>
-
+    <script src="app.js"></script>
 </body>
 </html>
